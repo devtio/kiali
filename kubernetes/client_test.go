@@ -1,13 +1,63 @@
 package kubernetes
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"k8s.io/api/apps/v1beta1"
 	"k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func formatTime(t time.Time) string {
+	return t.Format(time.RFC3339)
+}
+
+func TestNewClient(t *testing.T) {
+	assert := assert.New(t)
+	client, err := NewClient()
+
+	virtualServices, err2 := GetVirtualServices(client, "default")
+	for _, vs := range virtualServices {
+		fmt.Println("Found Virtual Service: ")
+		fmt.Println("Name: ", vs.GetObjectMeta().Name)
+		fmt.Println("Created: ", formatTime(vs.GetObjectMeta().CreationTimestamp.Time))
+		fmt.Println("Resource Version: ", vs.GetObjectMeta().ResourceVersion)
+		fmt.Println("Hosts: ", vs.GetSpec()["hosts"])
+		fmt.Println("Gateways: ", vs.GetSpec()["gateways"])
+		fmt.Println("Http: ", vs.GetSpec()["http"])
+		fmt.Println("Tcp: ", vs.GetSpec()["tcp"])
+	}
+
+	assert.Equal(err, nil)
+	assert.Equal(err2, nil)
+}
+
+// test services
+
+// GetVirtualServices return all VirtualServices for a given namespace.
+// If serviceName param is provided it will filter all VirtualServices having a host defined on a particular service.
+// It returns an error on any problem.
+func GetVirtualServices(in *IstioClient, namespace string) ([]IstioObject, error) {
+	result, err := in.istioNetworkingApi.Get().Namespace(namespace).Resource(virtualServices).Do().Get()
+	if err != nil {
+		return nil, err
+	}
+	virtualServiceList, ok := result.(*VirtualServiceList)
+	if !ok {
+		return nil, fmt.Errorf("%s doesn't return a VirtualService list", namespace)
+	}
+
+	virtualServices := make([]IstioObject, 0)
+	for _, virtualService := range virtualServiceList.GetItems() {
+		virtualServices = append(virtualServices, virtualService.DeepCopyIstioObject())
+	}
+	return virtualServices, nil
+}
+
+// old
 
 func TestFilterDeploymentsForService(t *testing.T) {
 	assert := assert.New(t)

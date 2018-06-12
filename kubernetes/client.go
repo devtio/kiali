@@ -1,9 +1,11 @@
 package kubernetes
 
 import (
+	"flag"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 
 	"k8s.io/api/apps/v1beta1"
 	"k8s.io/api/core/v1"
@@ -13,9 +15,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	kube "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	kialiConfig "github.com/kiali/kiali/config"
 	"github.com/kiali/kiali/log"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 )
 
 const (
@@ -82,6 +86,13 @@ func ConfigClient() (*rest.Config, error) {
 	}, nil
 }
 
+func homeDir() string {
+	if h := os.Getenv("HOME"); h != "" {
+		return h
+	}
+	return os.Getenv("USERPROFILE") // windows
+}
+
 // NewClient creates a new client to the Kubernetes and Istio APIs.
 // It takes the assumption that Istio is deployed into the cluster.
 // It hides the access to Kubernetes/Openshift credentials.
@@ -89,15 +100,27 @@ func ConfigClient() (*rest.Config, error) {
 // It returns an error on any problem.
 func NewClient() (*IstioClient, error) {
 	client := IstioClient{}
-	config, err := ConfigClient()
+	// config, err := ConfigClient()
 
-	if err != nil {
-		return nil, err
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// config.QPS = k8sQPS
+	// config.Burst = k8sBurst
+
+	// replace with code from https://github.com/kubernetes/client-go/blob/master/examples/out-of-cluster-client-configuration/main.go
+	var kubeconfig *string
+	if home := homeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
+	flag.Parse()
+	// use the current context in kubeconfig
+	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 
-	config.QPS = k8sQPS
-	config.Burst = k8sBurst
-
+	//
 	k8s, err := kube.NewForConfig(config)
 	if err != nil {
 		return nil, err
